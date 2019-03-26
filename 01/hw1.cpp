@@ -5,9 +5,8 @@
 std::vector<int> prime (int max)
 {
 	std::vector<int> prime (max + 1, 1);
-
-
 	prime[0] = prime[1] = 0;
+
 	for(int i = 2; i * i <= max; ++i)
 	{
 		if (prime[i])
@@ -27,7 +26,7 @@ int counter(int begin, int end)
 
 	while(Data[i] <= end)
 	{
-		while((Data[i] >= begin) && (Data[i] <= end))
+		while((Data[i] >= begin) && (Data[i] <= end) && (i < Size))
 		{
 			if(a[Data[i]])
 				++counter;
@@ -47,18 +46,19 @@ int main(int argc, char* argv[])
 		int v = std::atoi(argv[i]);
 		int j = 0;
 
-		while(Data[j] <= v) ++j;
-		
+		while(Data[j] <= v)
+			++j;
+
 		if(Data[j - 1] != v)
 		{
 			std::cout << '0' << std::endl;
-		return 0;
+			return 0;
 		}
 	}
 
 	for(int i = 1; i < argc; i += 2)
 	{
-		std::cout << counter(std::atoi(argv[i]), std::atoi(argv[i + 1])) << std::endl; 
+		std::cout << counter(std::atoi(argv[i]), std::atoi(argv[i + 1])) << std::endl;
 	}
 
 	return 0;
