@@ -9,7 +9,8 @@ void ping()
 {
 	for (size_t i = 0; i < N;)
 	{
-		while(Ping_Pong) {
+		while(Ping_Pong)
+		{
 			std::cout << "ping" << std::endl;
 			i++;
 			Ping_Pong = false;
@@ -21,7 +22,8 @@ void pong()
 {
 	for (size_t i = 0; i < N;)
 	{
-		while(!Ping_Pong) {
+		while(!Ping_Pong)
+		{
 			std::cout << "pong" << std::endl;
 			i++;
 			Ping_Pong = true;
