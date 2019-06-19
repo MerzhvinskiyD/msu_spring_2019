@@ -8,13 +8,19 @@
 
 using namespace std;
 
-constexpr size_t max_size = 8 * 1024 * 1024 / sizeof(uint64_t) / 2;
 mutex m;
 condition_variable c;
 
-void sort(string input_name, size_t size, string output_name) // sorting
+void sort(const string& input_name, size_t size,const string& output_name) // sorting
 {
 	ifstream in(input_name, ios::binary | ios::in);
+	ofstream out(output_name, ios::binary | ios::out);
+
+	if(!in.is_open() or !out.is_open())
+	{
+		cout << "Cannot open file." << endl;
+		return;
+	}
 
 	vector<uint64_t> a(size);
 
@@ -25,10 +31,9 @@ void sort(string input_name, size_t size, string output_name) // sorting
 
 	std::sort(a.begin(), a.end());
 
-ofstream out(output_name, ios::binary | ios::out);
 
 	for(int i=0; i<size; i++)
-		out << a[i] << ' ';
+		out << a[i];
 
 	out.close();
 }
@@ -45,9 +50,9 @@ void split(ifstream& in, size_t size, ofstream& out1, ofstream& out2) //split of
 			break;
 		}
 		if(i < size)
-			out1 << a << ' ';
+			out1 << a;
 		else
-			out2 << a << ' ';   
+			out2 << a;   
 		++i; 
 		m.unlock();
 	}
@@ -63,20 +68,20 @@ void merge_(ifstream& in, ofstream& out, int64_t& bar) //merging of files
 
 		if(!(in >> a)){
 			if(bar != -1){
-				out << bar << ' ';
+				out << bar;
 				bar = -1;
 			}
 			c.notify_one();
 			break;
 		}
 		if(bar == -1){
-			out << a << ' ';
+			out << a;
 			continue;
 		}
 		if(a <= bar)
-			out << a << ' ';
+			out << a;
 		else{
-			out << bar << ' ';
+			out << bar;
 			bar = a;
 			c.notify_one();
 			if(bar==a)
@@ -85,24 +90,29 @@ void merge_(ifstream& in, ofstream& out, int64_t& bar) //merging of files
 	}
 }
 
-
-int iter=0;
-void merge_sort(string filename)
+void merge_sort(const string& filename, int& iter)
 {
+	constexpr size_t max_size = 8 * 1024 * 1024 / sizeof(uint64_t) / 2;
 	size_t size = 0;
 	int64_t bar;
 
 	string output_name = filename;
 
 	if(iter == 0)
-		output_name = "output";
+		output_name = "output.bin";
 	++iter;
 
 	uint64_t a;
 
 	ifstream in(filename, ios::binary | ios::in);
+	if(!in.is_open())
+	{
+		cout << "Can not open file." << endl;
+		return;
+	}
+
 	while(in >> a)
-	    ++size;
+		++size;
 
 	if(size <= max_size)
 		sort(filename, size, output_name);
@@ -115,6 +125,12 @@ void merge_sort(string filename)
 		ofstream out1(fn1, ios::binary | ios::out);
 		ofstream out2(fn2, ios::binary | ios::out);
 
+		if(!out1.is_open() or !out2.is_open())
+		{
+			cout << "Can not open file." << endl;
+			return;
+		}
+
 		thread s1(split, ref(in), max_size, ref(out1), ref(out2));
 		thread s2(split, ref(in), max_size, ref(out1), ref(out2));
 
@@ -124,12 +140,18 @@ void merge_sort(string filename)
 		out1.close();
 		out2.close();
 
-		merge_sort(fn1);
-		merge_sort(fn2);
+		merge_sort(fn1, iter);
+		merge_sort(fn2, iter);
 
 		ifstream in1(fn1, ios::binary | ios::in);
 		ifstream in2(fn2, ios::binary | ios::in);
 		ofstream out(output_name, ios::binary | ios::out);
+
+		if(!in1.is_open() or !in2.is_open() or !out.is_open())
+		{
+			cout << "Can not open file." << endl;
+			return;
+		}
 
 		in2 >> bar;
 
@@ -151,7 +173,8 @@ void merge_sort(string filename)
 
 int main()
 {
-	merge_sort("input");
+	int iter=0;
+	merge_sort("input.bin", iter);
 
 	return 0;
 }
