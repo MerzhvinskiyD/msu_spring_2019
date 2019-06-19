@@ -50,7 +50,7 @@ public:
 		return ProxyMatrix(cols, &data[cols * row]);
 	}
 
-	ProxyMatrix operator[](size_t row) const
+	const ProxyMatrix operator[](size_t row) const
 	{
 		if(row > rows - 1 or rows == 0)
 			throw std::out_of_range("");
