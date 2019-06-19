@@ -5,176 +5,157 @@
 #include <mutex>
 #include <condition_variable>
 #include <thread>
+#include <iterator>
 
 using namespace std;
 
-mutex m;
-condition_variable c;
-
-void sort(const string& input_name, size_t size,const string& output_name) // sorting
+vector<string> sort_(const string& input_name, size_t size) // sorting and splitting
 {
-	ifstream in(input_name, ios::binary | ios::in);
-	ofstream out(output_name, ios::binary | ios::out);
+    vector<string> file_names;
 
-	if(!in.is_open() or !out.is_open())
-	{
-		cout << "Cannot open file." << endl;
-		return;
-	}
+    ifstream in(input_name, ios::binary | ios::in);
 
-	vector<uint64_t> a(size);
+    if(!in)
+        throw runtime_error("Can not open file");
 
-	for(int i=0; i<size; i++)
-		in >> a[i];
+    size_t idx = 0;
 
-	in.close();
+    while (in) {
 
-	std::sort(a.begin(), a.end());
+        string output_file_name = "prepare_" + to_string(idx) + ".bin";
+        ofstream out(output_file_name, ios::binary | ios::out);
 
+        if (!out)
+            throw runtime_error("Cannot open file");
 
-	for(int i=0; i<size; i++)
-		out << a[i];
+        vector<uint64_t> a;
+        uint64_t c;
 
-	out.close();
+        for(int i=0; i<size; ++i)
+        {
+            in.read((char*)(&c), sizeof(uint64_t));
+            a.push_back(c);
+        }
+
+        sort(a.begin(), a.end());
+
+        for(int i=0; i<size; ++i)
+            out.write((char*)(&a[i]), sizeof(uint64_t));
+
+        out.close();
+
+        file_names.push_back(output_file_name);
+        ++idx;
+    }
+
+    in.close();
+    return file_names;
 }
 
-void split(ifstream& in, size_t size, ofstream& out1, ofstream& out2) //split of file
+void merge_(const string& input_1, const string& input_2, const string& output)// merging
 {
-	uint64_t a;
-	int i=0;
+    ifstream in1(input_1, ios::binary | ios::in);
+    ifstream in2(input_2, ios::binary | ios::in);
+    ofstream out(output, ios::binary | ios::out);
 
-	while(1){
-		m.lock();
-		if(!(in >> a)){
-			m.unlock();
-			break;
-		}
-		if(i < size)
-			out1 << a;
-		else
-			out2 << a;   
-		++i; 
-		m.unlock();
-	}
+    if (!in1 or !in2 or !out)
+        throw runtime_error("Can not open file");
+
+    uint64_t a, b;
+    in1.read((char*)(&a), sizeof(uint64_t));
+    in2.read((char*)(&b), sizeof(uint64_t));
+    while(in1 and in2)
+    {
+        if (a > b)
+        {
+            out.write((char*)(&b), sizeof(uint64_t));
+            in2.read((char*)(&b), sizeof(uint64_t));
+        }
+        else
+        {
+            out.write((char*)(&a), sizeof(uint64_t));
+            in1.read((char*)(&a), sizeof(uint64_t));
+        }
+    }
+
+    if (!in1)
+        while (in2)
+        {
+            out.write((char*)(&b), sizeof(uint64_t));
+            in2.read((char*)(&b), sizeof(uint64_t));
+        }
+    else
+         while (in1)
+        {
+            out.write((char*)(&b), sizeof(uint64_t));
+            in1.read((char*)(&b), sizeof(uint64_t));
+        }
+
+    in1.close();
+    in2.close();
+    out.close();
+    remove(input_1.c_str());
+    remove(input_2.c_str());
 }
 
-void merge_(ifstream& in, ofstream& out, int64_t& bar) //merging of files
+
+void merge_function(vector<string> names, const string& output, size_t thread_index)
 {
-	int64_t a;
-	int it;
 
-	while(1){
-		unique_lock<mutex> lock(m);
+    size_t idx = 0;
 
-		if(!(in >> a)){
-			if(bar != -1){
-				out << bar;
-				bar = -1;
-			}
-			c.notify_one();
-			break;
-		}
-		if(bar == -1){
-			out << a;
-			continue;
-		}
-		if(a <= bar)
-			out << a;
-		else{
-			out << bar;
-			bar = a;
-			c.notify_one();
-			if(bar==a)
-				c.wait(lock);
-		}
-	}
+    while (names.size() != 1)
+    {
+        vector<string> tmp_names;
+
+        for (int i = 0; i < names.size(); ++i)
+        {
+            if (i + 1 < names.size()) {
+                string output_file_name = "prepared" + to_string(thread_index) + to_string(idx) + to_string(i) + ".bin";
+                merge_(names[i], names[i + 1], output_file_name);
+                tmp_names.push_back(output_file_name);
+                ++i;
+            } else {
+                tmp_names.push_back(names[i]);
+            }
+        }
+
+        ++idx;
+        swap(names, tmp_names);
+    }
+
+    rename(names[0].c_str(), output.c_str());
 }
 
-void merge_sort(const string& filename, int& iter)
+
+void external_multithread_sort(const string& input, const string& output)
 {
-	constexpr size_t max_size = 8 * 1024 * 1024 / sizeof(uint64_t) / 2;
-	size_t size = 0;
-	int64_t bar;
+    constexpr size_t max_size = 1000;
+    auto file_names = sort_(input, max_size);
 
-	string output_name = filename;
+    if(file_names.size() == 1)
+    {
+        rename(file_names[0].c_str(), output.c_str());
+        return;
+    }
 
-	if(iter == 0)
-		output_name = "output.bin";
-	++iter;
+    string first_part = "prepared_part_1.bin";
+    string second_part = "prepared_part_2.bin";
 
-	uint64_t a;
+    vector<string> first_names_part(file_names.begin(), file_names.begin() + file_names.size() / 2);
+    vector<string> second_names_part(file_names.begin() + file_names.size() / 2, file_names.end());
 
-	ifstream in(filename, ios::binary | ios::in);
-	if(!in.is_open())
-	{
-		cout << "Can not open file." << endl;
-		return;
-	}
+    thread thread_1(merge_function, move(first_names_part), first_part, 1);
+    thread thread_2(merge_function, move(second_names_part), second_part, 2);
+    thread_1.join();
+    thread_2.join();
 
-	while(in >> a)
-		++size;
-
-	if(size <= max_size)
-		sort(filename, size, output_name);
-	else{
-
-		string fn1 = to_string(iter) + "1.bin";
-		string fn2 = to_string(iter) + "2.bin";
-
-		ifstream in(filename, ios::binary | ios::in);
-		ofstream out1(fn1, ios::binary | ios::out);
-		ofstream out2(fn2, ios::binary | ios::out);
-
-		if(!out1.is_open() or !out2.is_open())
-		{
-			cout << "Can not open file." << endl;
-			return;
-		}
-
-		thread s1(split, ref(in), max_size, ref(out1), ref(out2));
-		thread s2(split, ref(in), max_size, ref(out1), ref(out2));
-
-		s1.join();
-		s2.join();
-		in.close();
-		out1.close();
-		out2.close();
-
-		merge_sort(fn1, iter);
-		merge_sort(fn2, iter);
-
-		ifstream in1(fn1, ios::binary | ios::in);
-		ifstream in2(fn2, ios::binary | ios::in);
-		ofstream out(output_name, ios::binary | ios::out);
-
-		if(!in1.is_open() or !in2.is_open() or !out.is_open())
-		{
-			cout << "Can not open file." << endl;
-			return;
-		}
-
-		in2 >> bar;
-
-		thread m1(merge_, ref(in1), ref(out), ref(bar));
-		thread m2(merge_, ref(in2), ref(out), ref(bar));
-
-		m1.join();
-		m2.join();
-		in1.close();
-		in2.close();
-		out.close();
-
-		const char* file1 = fn1.c_str();
-		const char* file2 = fn2.c_str();
-		std::remove(file1);
-		std::remove(file2);
-	}
+    merge_(first_part, second_part, output);
 }
 
 int main()
 {
-	int iter=0;
-	merge_sort("input.bin", iter);
+    external_multithread_sort("input.bin", "output.bin");
 
-	return 0;
+    return 0;
 }
