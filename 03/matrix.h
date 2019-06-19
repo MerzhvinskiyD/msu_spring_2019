@@ -6,16 +6,16 @@ public:
 	public:
 		ProxyMatrix(size_t cols, int* data): cols(cols), pr_data(data) {}
 
-		int operator[](size_t col) const
+		int const operator[](size_t col) const
 		{	
-			if(col > cols - 1 or cols == 0)
+			if((col > cols - 1) or (cols == 0))
 				throw std::out_of_range("");
 			return pr_data[col];
 		}
 
 		int& operator[](size_t col)
 		{
-			if(col > cols - 1 or cols == 0)
+			if((col > cols - 1) or (cols == 0))
 				throw std::out_of_range("");
 			return pr_data[col];
 		}
@@ -59,6 +59,9 @@ public:
 
 	bool operator==(const Matrix& other) const
 	{
+		if((cols != other.cols) or (rows != other.rows))
+			return false;
+
 		if (this == &other)
 			return true;
 
@@ -82,8 +85,9 @@ public:
 			data[i] *= m;
 		return *this;
 	}
+	
 private:
-	size_t rows;
-	size_t cols;
+	const size_t rows;
+	const size_t cols;
 	int* data;
 };
